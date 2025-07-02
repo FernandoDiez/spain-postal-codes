@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Formatear y Enviar JSON</title>
+</head>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<body>
+  <h2>Formatear archivo JSON</h2>
+  <input type="file" id="archivoJSON" accept=".json">
+  <button onclick="procesarArchivo()">Procesar</button>
+  <button id="enviarBtn" style="display:none;" onclick="enviarRegistros()">Enviar registros</button>
+
+  <script>
+    const articulos = new Set(['el', 'la', 'los', 'las', 'un', 'una', 'unos', 'unas', 'de', 'del', 'al', 'y', 'o', 'en']);
+    let datosProcesados = [];
+
+    function formatearTexto(texto) {
+      return texto
+        .split(' ')
+        .map((palabra, index) => {
+          const p = palabra.toLowerCase();
+          return (index === 0 || !articulos.has(p)) ? p.charAt(0).toUpperCase() + p.slice(1) : p;
+        })
+        .join(' ');
+    }
+
+    function procesarArchivo() {
+      const archivo = document.getElementById('archivoJSON').files[0];
+      if (!archivo) return alert('Por favor, selecciona un archivo JSON.');
+
+      const lector = new FileReader();
+      lector.onload = function (e) {
+        const contenido = e.target.result;
+        let datos = JSON.parse(contenido);
+
+        datosProcesados = datos.map(item => {
+          const nuevoItem = {};
+          for (let clave in item) {
+            if (clave === 'postalCode') {
+              nuevoItem[clave] = String(item[clave]).padStart(5, '0');
+            } else {
+              nuevoItem[clave] = formatearTexto(item[clave]);
+            }
+          }
+          return nuevoItem;
+        });
+
+        dividirPorProvincia(datosProcesados);
+        document.getElementById('enviarBtn').style.display = 'inline';
+      };
+
+      lector.readAsText(archivo, 'UTF-8');
+    }
+
+    // function dividirPorProvincia(datos) {
+    //   const grupos = {};
+
+    //   datos.forEach(item => {
+    //     const provincia = item.province?.toLowerCase().replace(/\s+/g, "_") || "desconocida";
+    //     if (!grupos[provincia]) grupos[provincia] = [];
+    //     grupos[provincia].push(item);
+    //   });
+
+    //   Object.entries(grupos).forEach(([provincia, registros]) => {
+    //     const blob = new Blob([JSON.stringify(registros, null, 2)], { type: 'application/json' });
+    //     const url = URL.createObjectURL(blob);
+    //     const enlace = document.createElement('a');
+    //     enlace.href = url;
+    //     enlace.download = `${provincia}.json`;
+    //     enlace.click();
+    //   });
+
+    //   alert(`✅ Archivo dividido en ${Object.keys(grupos).length} provincias.`);
+    // }
+
+    function normalizarNombre(str) {
+      return str
+        .toLowerCase()
+        .normalize("NFD")              // descompone letras acentuadas
+        .replace(/[\u0300-\u036f]/g, "") // elimina los signos diacríticos
+        .replace(/ñ/g, "n")              // ñ → n
+        .replace(/\s+/g, "_");           // espacios → guiones bajos
+    }
+
+
+    async function dividirPorProvincia(datos) {
+      const grupos = {};
+
+      datos.forEach(item => {
+        const provincia = item.province?.toLowerCase().replace(/\s+/g, "") || "desconocida";
+        if (!grupos[provincia]) grupos[provincia] = [];
+        grupos[provincia].push(item);
+      });
+
+      const zip = new JSZip();
+
+      Object.entries(grupos).forEach(([provincia, registros]) => {
+        zip.file(
+          // `codigos_postales_${normalizarNombre(provincia)}.json`,
+          `${normalizarNombre(provincia)}.json`,
+          JSON.stringify(registros, null, 2)
+        );
+      });
+
+      // Generar y descargar ZIP
+      const contenidoZip = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(contenidoZip);
+      const enlace = document.createElement("a");
+      enlace.href = url;
+      enlace.download = "codigos_postales_por_provincia.zip";
+      enlace.click();
+
+      alert(`✅ ZIP generado con ${Object.keys(grupos).length} provincias.`);
+    }
+
+
+    function enviarRegistros() {
+      if (!datosProcesados.length) return alert('No hay datos para enviar.');
+
+      const endpoint = 'https://localhost:3000/api/population'; // ← Cambia esto por tu URL real
+
+      datosProcesados.forEach((registro, index) => {
+        fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(registro)
+        })
+          .then(res => res.ok
+            ? console.log(`✅ Registro ${index + 1} enviado correctamente.`)
+            : console.error(`❌ Error al enviar registro ${index + 1}`))
+          .catch(err => console.error(`⚠️ Fallo de red en registro ${index + 1}`, err));
+      });
+
+      alert('Envío iniciado. Ver consola para seguimiento.');
+    }
+  </script>
+
+</body>
+
+</html>

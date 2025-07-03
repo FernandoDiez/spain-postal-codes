@@ -48,6 +48,7 @@
           return nuevoItem;
         });
 
+        console.log('Datos procesados: ', datosProcesados.length)
         dividirPorProvincia(datosProcesados);
         document.getElementById('enviarBtn').style.display = 'inline';
       };
@@ -88,7 +89,6 @@
 
     async function dividirPorProvincia(datos) {
       const grupos = {};
-
       datos.forEach(item => {
         const provincia = item.province?.toLowerCase().replace(/\s+/g, "") || "desconocida";
         if (!grupos[provincia]) grupos[provincia] = [];
@@ -97,7 +97,9 @@
 
       const zip = new JSZip();
 
+      let itemsLength = 0
       Object.entries(grupos).forEach(([provincia, registros]) => {
+        itemsLength = itemsLength + registros.length
         zip.file(
           // `codigos_postales_${normalizarNombre(provincia)}.json`,
           `${normalizarNombre(provincia)}.json`,
@@ -113,7 +115,7 @@
       enlace.download = "codigos_postales_por_provincia.zip";
       enlace.click();
 
-      alert(`✅ ZIP generado con ${Object.keys(grupos).length} provincias.`);
+      alert(`✅ ZIP generado con ${Object.keys(grupos).length} provincias y un total de ${itemsLength} líneas en total.`);
     }
 
 
